@@ -29,6 +29,10 @@ extern "C"
 	EXPORT void WINAPI CncImgGetImageFrame(unsigned int nFacing, int* width, int* height, int* x, int* y);
 	EXPORT void WINAPI CncImgGetImageSize(unsigned int nFacing, int* width, int* height);
 	EXPORT bool WINAPI CncImgGetImageData(unsigned int nFacing, unsigned char** ppBuffer);
+	EXPORT void WINAPI CncImgGetShadowImageFrame(unsigned int nFacing, int* width, int* height, int* x, int* y);
+	EXPORT void WINAPI CncImgGetShadowImageSize(unsigned int nFacing, int* width, int* height);
+	EXPORT bool WINAPI CncImgGetShadowImageData(unsigned int nFacing, unsigned char** ppBuffer);
+	EXPORT void WINAPI  CncImgSetLightingSource(float x, float y, float z);
 
 	EXPORT void WINAPI CncImgClearCurrentVXL();
 	EXPORT bool WINAPI CncImgIsVXLLoaded();

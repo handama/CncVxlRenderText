@@ -6,7 +6,7 @@ CLASSES_START
 
 size_t vxlfile::direction_count = 32u;
 
-const d3dvector vxlfile::reversed_light = { 0.0f,1.0f,0.0f };
+d3dvector vxlfile::reversed_light = { 0.0f,1.0f,0.0f };
 
 hvafile::hvafile() :_signature(),
 	_framecount(0),

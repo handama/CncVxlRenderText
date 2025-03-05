@@ -98,6 +98,40 @@ extern "C"
 		return true;
 	}
 
+	void WINAPI CncImgGetShadowImageFrame(unsigned int nFacing, int* width, int* height, int* x, int* y)
+	{
+		const auto& bound = CncImgCurrentVXL->shadow_cache(nFacing).frame_bound;
+		if (width)
+			*width = bound.right - bound.left;
+		if (height)
+			*height = bound.bottom - bound.top;
+		if (x)
+			*x = bound.left;
+		if (y)
+			*y = bound.top;
+
+	}
+	void WINAPI CncImgGetShadowImageSize(unsigned int nFacing, int* width, int* height)
+	{
+		CncImgGetShadowImageFrame(nFacing, width, height, nullptr, nullptr);
+	}
+	bool WINAPI CncImgGetShadowImageData(unsigned int nFacing, unsigned char** ppBuffer)
+	{
+		if (!ppBuffer)
+			return false;
+
+		int w, h;
+		CncImgGetShadowImageSize(nFacing, &w, &h);
+		*ppBuffer = (unsigned char*)CncImgMalloc(w * h);
+		memcpy(*ppBuffer, CncImgCurrentVXL->shadow_cache(nFacing).cache.get(), w * h);
+
+		return true;
+	}
+	void WINAPI CncImgSetLightingSource(float x, float y, float z)
+	{
+		thomas::vxlfile::reversed_light = { x,y,z };
+	}
+
 	void WINAPI CncImgClearCurrentVXL()
 	{
 		CncImgCurrentVXL->clear();

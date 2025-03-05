@@ -110,7 +110,7 @@ public:
 	static constexpr size_t buffer_width = 256u;
 	static constexpr size_t buffer_height = 256u;
 	static size_t direction_count; // modify this constant to generate all facings
-	static const d3dvector reversed_light;
+	static d3dvector reversed_light;
 
 	using cache_type = byte[buffer_height][buffer_width];
 	using zbuffer_type = float32_t[buffer_height][buffer_width];
