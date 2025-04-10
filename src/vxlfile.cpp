@@ -285,12 +285,13 @@ bool vxlfile::prepare_single_dir_cache(const size_t diridx, vplfile& vplfile, co
 	zbuffer_pointer zbuffer(new float32_t[buffer_height][buffer_width]);
 	d3dmatrix off;
 	d3dmatrix rotation;
-	float32_t rotation_angle = static_cast<float32_t>(diridx * D3DX_PI * 2.0f / direction_count);
+
+	float32_t rotation_angle = static_cast<float32_t>((diridx + direction_count / 2) % direction_count * D3DX_PI * 2.0f / direction_count);
 
 	D3DXMatrixTranslation(
 		&off,
-		static_cast<float>(F * 30.0 * D3DX_SQRT2 / 256.0),
-		static_cast<float>(- L * 30.0 * D3DX_SQRT2 / 256.0),
+		static_cast<float>(-F * 30.0 * D3DX_SQRT2 / 256.0),
+		static_cast<float>(L * 30.0 * D3DX_SQRT2 / 256.0),
 		static_cast<float>(H * 30.0 * D3DX_SQRT2 / 256.0)
 	);
 	D3DXMatrixRotationZ(&rotation, rotation_angle);
@@ -340,7 +341,10 @@ bool vxlfile::prepare_single_dir_cache(const size_t diridx, vplfile& vplfile, co
 		d3dmatrix scale;
 		D3DXMatrixScaling(&scale, scales.x, scales.y, scales.z);
 
-		d3dmatrix result = trans_center * scale * transform * off * rotation;
+		d3dmatrix mirrorX;
+		D3DXMatrixScaling(&mirrorX, -1.0f, 1.0f, 1.0f);
+
+		d3dmatrix result = trans_center * scale * mirrorX * transform * off * rotation;
 		d3dvector* normal_table = normal::normal_table_directory[static_cast<uint8_t>(current_tailer.normal_type)];
 
 		for (vxl_vertex& vertex : vertex_cache)
