@@ -290,7 +290,7 @@ bool vxlfile::prepare_single_dir_cache(const size_t diridx, vplfile& vplfile, co
 
 	D3DXMatrixTranslation(
 		&off,
-		static_cast<float>(-F * 30.0 * D3DX_SQRT2 / 256.0),
+		static_cast<float>(F * 30.0 * D3DX_SQRT2 / 256.0),
 		static_cast<float>(L * 30.0 * D3DX_SQRT2 / 256.0),
 		static_cast<float>(H * 30.0 * D3DX_SQRT2 / 256.0)
 	);
@@ -344,7 +344,7 @@ bool vxlfile::prepare_single_dir_cache(const size_t diridx, vplfile& vplfile, co
 		d3dmatrix mirrorX;
 		D3DXMatrixScaling(&mirrorX, -1.0f, 1.0f, 1.0f);
 
-		d3dmatrix result = trans_center * scale * mirrorX * transform * off * rotation;
+		d3dmatrix result = trans_center * scale * transform * off * mirrorX * rotation;
 		d3dvector* normal_table = normal::normal_table_directory[static_cast<uint8_t>(current_tailer.normal_type)];
 
 		for (vxl_vertex& vertex : vertex_cache)
