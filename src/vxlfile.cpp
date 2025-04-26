@@ -357,6 +357,9 @@ bool vxlfile::prepare_single_dir_cache(const size_t diridx, vplfile& vplfile, co
 			d3dvector screen_pos = math::fructum_transformation(buffer_view, position);
 			int32_t x = static_cast<int32_t>(screen_pos.x);
 			int32_t y = static_cast<int32_t>(screen_pos.y);
+
+			if (x < 0 || x >= buffer_width) continue;
+			if (y < 0 || y >= buffer_height) continue;
 			
 			position.z = 0.0f;
 			d3dvector shadow_pos = math::fructum_transformation(buffer_view, position);
