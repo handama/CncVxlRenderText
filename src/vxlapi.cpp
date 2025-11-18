@@ -52,9 +52,9 @@ extern "C"
 		return CncImgCurrentVXL->load_hva(pBuffer);
 	}
 
-	bool WINAPI CncImgPrepareVXLCache(unsigned int nFacing, int F, int L, int H)
+	bool WINAPI CncImgPrepareVXLCache(unsigned int nFacing, int F, int L, int H, int fireAngle)
 	{
-		return CncImgCurrentVXL->prepare_single_dir_cache(nFacing, *CncImgCurrentVPL, F, L, H);
+		return CncImgCurrentVXL->prepare_single_dir_cache(nFacing, *CncImgCurrentVPL, F, L, H, fireAngle);
 	}
 
 	int WINAPI CncImgGetImageWidth(unsigned int nFacing)

@@ -41,6 +41,36 @@ D3DXMATRIX* WINAPI D3DXMatrixRotationZ(D3DXMATRIX* pOut, float Angle)
     return pOut;
 }
 
+D3DXMATRIX* WINAPI D3DXMatrixRotationX(D3DXMATRIX* pOut, float Angle)
+{
+    D3DXMatrixIdentity(pOut);
+
+    float c = cosf(Angle);
+    float s = sinf(Angle);
+
+    pOut->m[1][1] = c;
+    pOut->m[1][2] = s;
+    pOut->m[2][1] = -s;
+    pOut->m[2][2] = c;
+
+    return pOut;
+}
+
+D3DXMATRIX* WINAPI D3DXMatrixRotationY(D3DXMATRIX* pOut, float Angle)
+{
+    D3DXMatrixIdentity(pOut);
+
+    float c = cosf(Angle);
+    float s = sinf(Angle);
+
+    pOut->m[0][0] = c;
+    pOut->m[0][2] = -s;
+    pOut->m[2][0] = s;
+    pOut->m[2][2] = c;
+
+    return pOut;
+}
+
 D3DXVECTOR4* WINAPI D3DXVec3Transform(D3DXVECTOR4* pOut, const D3DXVECTOR3* pV, const D3DXMATRIX* pM)
 {
     const D3DXVECTOR3 v = *pV;

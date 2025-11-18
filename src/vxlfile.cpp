@@ -273,7 +273,7 @@ vxlfile::vertex_cache_type& vxlfile::vertecies(const size_t limb)
 	return _prepared_vertex[limb];
 }
 
-bool vxlfile::prepare_single_dir_cache(const size_t diridx, vplfile& vplfile, const int F, const int L, const int H)
+bool vxlfile::prepare_single_dir_cache(const size_t diridx, vplfile& vplfile, const int F, const int L, const int H, const int fire_angle)
 {
 	if (!is_loaded() || diridx >= direction_count)
 		return false;
@@ -285,8 +285,10 @@ bool vxlfile::prepare_single_dir_cache(const size_t diridx, vplfile& vplfile, co
 	zbuffer_pointer zbuffer(new float32_t[buffer_height][buffer_width]);
 	d3dmatrix off;
 	d3dmatrix rotation;
+	d3dmatrix rotationY;
 
 	float32_t rotation_angle = static_cast<float32_t>((diridx + direction_count / 2) % direction_count * D3DX_PI * 2.0f / direction_count);
+	float32_t rotation_angle_fire = static_cast<float32_t>(static_cast<float32_t>(fire_angle) / 64.0f * 90.0f / 360.0f * D3DX_PI * 2.0f);
 
 	D3DXMatrixTranslation(
 		&off,
@@ -295,6 +297,7 @@ bool vxlfile::prepare_single_dir_cache(const size_t diridx, vplfile& vplfile, co
 		static_cast<float>(H * 30.0 * D3DX_SQRT2 / 256.0)
 	);
 	D3DXMatrixRotationZ(&rotation, rotation_angle);
+	D3DXMatrixRotationY(&rotationY, rotation_angle_fire);
 
 	if (!cache || !shadow_cache || !zbuffer)
 		return false;
@@ -344,7 +347,7 @@ bool vxlfile::prepare_single_dir_cache(const size_t diridx, vplfile& vplfile, co
 		d3dmatrix mirrorX;
 		D3DXMatrixScaling(&mirrorX, -1.0f, 1.0f, 1.0f);
 
-		d3dmatrix result = trans_center * scale * transform * off * mirrorX * rotation;
+		d3dmatrix result = trans_center * scale * transform * off * mirrorX * rotationY * rotation;
 		d3dvector* normal_table = normal::normal_table_directory[static_cast<uint8_t>(current_tailer.normal_type)];
 
 		for (vxl_vertex& vertex : vertex_cache)

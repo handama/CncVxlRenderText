@@ -166,6 +166,8 @@ extern "C" {
 	D3DXMATRIX* WINAPI D3DXMatrixTranslation(D3DXMATRIX* pOut, float x, float y, float z);
 	D3DXMATRIX* WINAPI D3DXMatrixScaling(D3DXMATRIX* pOut, float sx, float sy, float sz);
 	D3DXMATRIX* WINAPI D3DXMatrixRotationZ(D3DXMATRIX* pOut, float Angle);
+	D3DXMATRIX* WINAPI D3DXMatrixRotationX(D3DXMATRIX* pOut, float Angle);
+	D3DXMATRIX* WINAPI D3DXMatrixRotationY(D3DXMATRIX* pOut, float Angle);
 	D3DXVECTOR4* WINAPI D3DXVec3Transform(D3DXVECTOR4* pOut, const D3DXVECTOR3* pV, const D3DXMATRIX* pM);
 	D3DXVECTOR3* WINAPI D3DXVec3TransformNormal(D3DXVECTOR3* pOut, const D3DXVECTOR3* pV, const D3DXMATRIX* pM);
 }
