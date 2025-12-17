@@ -340,7 +340,13 @@ bool vxlfile::prepare_single_dir_cache(const size_t diridx, vplfile& vplfile, co
 
 		// d3dmatrix origin = current_tailer.matrix.d3d_matrix(current_tailer.scale);
 		d3dmatrix transform = _associated_hva->matrix(0, l).integrate_matrix(scales, current_tailer.scale);
-		d3dmatrix trans_center = math::translation_from(min_bound);
+
+		vector3<float32_t> center = min_bound;
+		center.x() /= scales.x;
+		center.y() /= scales.y;
+		center.z() /= scales.z;
+
+		d3dmatrix trans_center = math::translation_from(center);
 		d3dmatrix scale;
 		D3DXMatrixScaling(&scale, scales.x, scales.y, scales.z);
 
