@@ -273,7 +273,8 @@ vxlfile::vertex_cache_type& vxlfile::vertecies(const size_t limb)
 	return _prepared_vertex[limb];
 }
 
-bool vxlfile::prepare_single_dir_cache(const size_t diridx, vplfile& vplfile, const int F, const int L, const int H, const int fire_angle)
+bool vxlfile::prepare_single_dir_cache(const size_t diridx, vplfile& vplfile,
+	const int F, const int L, const int H, const int fire_angle, const bool VanillaShadow)
 {
 	if (!is_loaded() || diridx >= direction_count)
 		return false;
@@ -322,6 +323,24 @@ bool vxlfile::prepare_single_dir_cache(const size_t diridx, vplfile& vplfile, co
 			prepare_vertecies(i);
 	}
 
+	float32_t min_bound_z = 256.0f;
+	for (size_t l = 0; l < limb_count(); l++)
+	{
+		vxl_limb_tailer& current_tailer = _tailers[l];
+
+		d3dvector scales;
+		vector3<float32_t> min_bound = current_tailer.min_bounds;
+		vector3<float32_t> max_bound = current_tailer.max_bounds;
+
+		scales.x = (max_bound.x() - min_bound.x()) / current_tailer.xsize;
+		scales.y = (max_bound.y() - min_bound.y()) / current_tailer.ysize;
+		scales.z = (max_bound.z() - min_bound.z()) / current_tailer.zsize;
+
+		d3dmatrix transform = _associated_hva->matrix(0, l).integrate_matrix(scales, current_tailer.scale);
+
+		min_bound_z = std::min(min_bound_z, min_bound.z() + transform.m[3][2]);
+	}
+
 	for (size_t l = 0; l < limb_count(); l++)
 	{
 		vertex_cache_type vertex_cache = vertecies(l);
@@ -367,45 +386,48 @@ bool vxlfile::prepare_single_dir_cache(const size_t diridx, vplfile& vplfile, co
 			int32_t x = static_cast<int32_t>(screen_pos.x);
 			int32_t y = static_cast<int32_t>(screen_pos.y);
 
-			if (x < 0 || x >= buffer_width) continue;
-			if (y < 0 || y >= buffer_height) continue;
-			
-			position.z = 0.0f;
+			if (x >= 0 && x < buffer_width && y >= 0 && y < buffer_height)
+			{
+				float32_t light_angle = std::acos((D3DXVec3Dot(&vxlfile::reversed_light, &normal_vec)) /
+					D3DXVec3Length(&vxlfile::reversed_light) / D3DXVec3Length(&normal_vec));
+
+				byte color = 0;
+				if (light_angle >= D3DX_PI / 2.0f)
+				{
+					color = vplfile[0][vertex.voxel.color];
+				}
+				else
+				{
+					int32_t index = 31 - int32_t(light_angle / (D3DX_PI / 2.0f) * 32.0f);
+					color = vplfile[index][vertex.voxel.color];
+				}
+
+				if (vertex.voxel.color && screen_pos.z < zbuffer[y][x] && screen_pos.z >= 0.0f)
+				{
+					zbuffer[y][x] = screen_pos.z;
+					cache[y][x] = color;
+
+					if (xl > x)xl = x;
+					if (xh < x)xh = x;
+					if (yl > y)yl = y;
+					if (yh < y)yh = y;
+				}
+			}
+
+			position.z = VanillaShadow ? min_bound_z : 0.0f;
 			d3dvector shadow_pos = math::fructum_transformation(buffer_view, position);
+
 			int32_t sx = static_cast<int32_t>(shadow_pos.x);
 			int32_t sy = static_cast<int32_t>(shadow_pos.y);
 
-			float32_t light_angle = std::acos((D3DXVec3Dot(&vxlfile::reversed_light, &normal_vec)) /
-				D3DXVec3Length(&vxlfile::reversed_light) / D3DXVec3Length(&normal_vec));
-
-			byte color = 0;
-			if (light_angle >= D3DX_PI / 2.0f)
+			if (sx >= 0 && sx < buffer_width && sy >= 0 && sy < buffer_height)
 			{
-				color = vplfile[0][vertex.voxel.color];
+				shadow_cache[sy][sx] = 1;//shadow color index
+				if (sxl > sx)sxl = sx;
+				if (sxh < sx)sxh = sx;
+				if (syl > sy)syl = sy;
+				if (syh < sy)syh = sy;
 			}
-			else
-			{
-				int32_t index = 31 - int32_t(light_angle / (D3DX_PI / 2.0f) * 32.0f);
-				color = vplfile[index][vertex.voxel.color];
-			}
-
-			if (vertex.voxel.color && screen_pos.z < zbuffer[y][x] && screen_pos.z >= 0.0f)
-			{
-				zbuffer[y][x] = screen_pos.z;
-				cache[y][x] = color;
-
-				if (xl > x)xl = x;
-				if (xh < x)xh = x;
-				if (yl > y)yl = y;
-				if (yh < y)yh = y;
-			}
-
-			shadow_cache[sy][sx] = 1;//shadow color index
-			if (sxl > sx)sxl = sx;
-			if (sxh < sx)sxh = sx;
-			if (syl > sy)syl = sy;
-			if (syh < sy)syh = sy;
-
 		}
 	}
 

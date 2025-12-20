@@ -584,9 +584,9 @@ struct game_matrix
 		matrix.m[2][1] = this->_data[1][2];
 		matrix.m[2][2] = this->_data[2][2];
 
-		matrix.m[3][0] = this->_data[0][3] * det * scale.x;
-		matrix.m[3][1] = this->_data[1][3] * det * scale.y;
-		matrix.m[3][2] = this->_data[2][3] * det * scale.z;
+		matrix.m[3][0] = this->_data[0][3] * det;// * scale.x;
+		matrix.m[3][1] = this->_data[1][3] * det;// * scale.y;
+		matrix.m[3][2] = this->_data[2][3] * det;// * scale.z;
 
 		return matrix;
 	}
