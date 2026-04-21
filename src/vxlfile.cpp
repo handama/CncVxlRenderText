@@ -273,48 +273,47 @@ vxlfile::vertex_cache_type& vxlfile::vertecies(const size_t limb)
 	return _prepared_vertex[limb];
 }
 
-bool vxlfile::prepare_single_dir_cache(const size_t diridx, vplfile& vplfile,
-	const int F, const int L, const int H, const int fire_angle, const bool VanillaShadow)
+bool vxlfile::prepare_single_dir_cache(
+	const size_t diridx,
+	vplfile& vplfile,
+	const int F, const int L, const int H,
+	const int fire_angle,
+	const bool VanillaShadow)
 {
 	if (!is_loaded() || diridx >= direction_count)
 		return false;
-	
+
 	const rect buffer_view = { 0,0,buffer_width,buffer_height };
 
-	cache_pointer cache(new byte[buffer_height][buffer_width]);
-	cache_pointer shadow_cache(new byte[buffer_height][buffer_width]);
-	zbuffer_pointer zbuffer(new float32_t[buffer_height][buffer_width]);
-	d3dmatrix off;
-	d3dmatrix rotation;
-	d3dmatrix rotationY;
-
-	float32_t rotation_angle = static_cast<float32_t>((diridx + direction_count / 2) % direction_count * D3DX_PI * 2.0f / direction_count);
-	float32_t rotation_angle_fire = static_cast<float32_t>(static_cast<float32_t>(fire_angle) / 64.0f * 90.0f / 360.0f * D3DX_PI * 2.0f);
-
-	D3DXMatrixTranslation(
-		&off,
-		static_cast<float>(F * 30.0 * D3DX_SQRT2 / 256.0),
-		static_cast<float>(L * 30.0 * D3DX_SQRT2 / 256.0),
-		static_cast<float>(H * 30.0 * D3DX_SQRT2 / 256.0)
-	);
-	D3DXMatrixRotationZ(&rotation, rotation_angle);
-	D3DXMatrixRotationY(&rotationY, rotation_angle_fire);
+	std::unique_ptr<byte[]> cache(new byte[buffer_width * buffer_height]);
+	std::unique_ptr<byte[]> shadow_cache(new byte[buffer_width * buffer_height]);
+	std::unique_ptr<float[]> zbuffer(new float[buffer_width * buffer_height]);
 
 	if (!cache || !shadow_cache || !zbuffer)
 		return false;
 
-	memset(cache.get(), 0, sizeof(cache_type));
-	memset(shadow_cache.get(), 0, sizeof(cache_type));
-	for (size_t i = 0; i < buffer_height; i++)
-		for (size_t j = 0; j < buffer_width; j++)
-			zbuffer[i][j] = std::numeric_limits<float32_t>::max();
-	
-	int32_t xl, xh, yl, yh;
-	int32_t sxl, sxh, syl, syh;
+	memset(cache.get(), 0, buffer_width * buffer_height);
+	memset(shadow_cache.get(), 0, buffer_width * buffer_height);
+	std::fill_n(zbuffer.get(), buffer_width * buffer_height, std::numeric_limits<float>::max());
 
-	xl = sxl = buffer_width - 1;
-	yl = syl = buffer_height - 1;
-	xh = yh = sxh = syh = 0;
+	d3dmatrix off, rotation, rotationY;
+
+	float rotation_angle = float((diridx + direction_count / 2) % direction_count * D3DX_PI * 2.0 / direction_count);
+	float rotation_angle_fire = float(fire_angle / 64.0f * 90.0f / 360.0f * D3DX_PI * 2.0f);
+
+	D3DXMatrixTranslation(&off,
+		float(F * 30.0 * D3DX_SQRT2 / 256.0),
+		float(L * 30.0 * D3DX_SQRT2 / 256.0),
+		float(H * 30.0 * D3DX_SQRT2 / 256.0));
+
+	D3DXMatrixRotationZ(&rotation, rotation_angle);
+	D3DXMatrixRotationY(&rotationY, rotation_angle_fire);
+
+	int xl = buffer_width - 1, xh = 0;
+	int yl = buffer_height - 1, yh = 0;
+
+	int sxl = buffer_width - 1, sxh = 0;
+	int syl = buffer_height - 1, syh = 0;
 
 	if (_prepared_vertex.empty())
 	{
@@ -323,143 +322,179 @@ bool vxlfile::prepare_single_dir_cache(const size_t diridx, vplfile& vplfile,
 			prepare_vertecies(i);
 	}
 
-	float32_t min_bound_z = 256.0f;
+	D3DXVec3Normalize(&reversed_light, &reversed_light);
+
+	float min_bound_z = 256.0f;
 	for (size_t l = 0; l < limb_count(); l++)
 	{
-		vxl_limb_tailer& current_tailer = _tailers[l];
+		auto& t = _tailers[l];
 
-		d3dvector scales;
-		vector3<float32_t> min_bound = current_tailer.min_bounds;
-		vector3<float32_t> max_bound = current_tailer.max_bounds;
+		d3dvector scales{
+			(t.max_bounds.x() - t.min_bounds.x()) / t.xsize,
+			(t.max_bounds.y() - t.min_bounds.y()) / t.ysize,
+			(t.max_bounds.z() - t.min_bounds.z()) / t.zsize
+		};
 
-		scales.x = (max_bound.x() - min_bound.x()) / current_tailer.xsize;
-		scales.y = (max_bound.y() - min_bound.y()) / current_tailer.ysize;
-		scales.z = (max_bound.z() - min_bound.z()) / current_tailer.zsize;
-
-		d3dmatrix transform = _associated_hva->matrix(0, l).integrate_matrix(scales, current_tailer.scale);
-
-		min_bound_z = std::min(min_bound_z, min_bound.z() + transform.m[3][2]);
+		d3dmatrix transform = _associated_hva->matrix(0, l).integrate_matrix(scales, t.scale);
+		min_bound_z = std::min(min_bound_z, t.min_bounds.z() + transform.m[3][2]);
 	}
 
 	for (size_t l = 0; l < limb_count(); l++)
 	{
-		vertex_cache_type vertex_cache = vertecies(l);
-		vxl_limb_tailer& current_tailer = _tailers[l];
+		auto& vertex_cache = vertecies(l);
+		if (vertex_cache.empty()) continue;
 
-		if (vertex_cache.empty())
-			continue;
+		auto& t = _tailers[l];
 
-		d3dvector scales;
-		vector3<float32_t> min_bound = current_tailer.min_bounds;
-		vector3<float32_t> max_bound = current_tailer.max_bounds;
+		d3dvector scales{
+			(t.max_bounds.x() - t.min_bounds.x()) / t.xsize,
+			(t.max_bounds.y() - t.min_bounds.y()) / t.ysize,
+			(t.max_bounds.z() - t.min_bounds.z()) / t.zsize
+		};
 
-		scales.x = (max_bound.x() - min_bound.x()) / current_tailer.xsize;
-		scales.y = (max_bound.y() - min_bound.y()) / current_tailer.ysize;
-		scales.z = (max_bound.z() - min_bound.z()) / current_tailer.zsize;
+		d3dmatrix transform = _associated_hva->matrix(0, l).integrate_matrix(scales, t.scale);
 
-		// d3dmatrix origin = current_tailer.matrix.d3d_matrix(current_tailer.scale);
-		d3dmatrix transform = _associated_hva->matrix(0, l).integrate_matrix(scales, current_tailer.scale);
-
-		vector3<float32_t> center = min_bound;
+		vector3<float> center = t.min_bounds;
 		center.x() /= scales.x;
 		center.y() /= scales.y;
 		center.z() /= scales.z;
 
 		d3dmatrix trans_center = math::translation_from(center);
+
 		d3dmatrix scale;
 		D3DXMatrixScaling(&scale, scales.x, scales.y, scales.z);
 
 		d3dmatrix mirrorX;
 		D3DXMatrixScaling(&mirrorX, -1.0f, 1.0f, 1.0f);
 
-		d3dmatrix result = trans_center * scale * transform * off * mirrorX * rotationY * rotation;
-		d3dvector* normal_table = normal::normal_table_directory[static_cast<uint8_t>(current_tailer.normal_type)];
+		d3dmatrix result =
+			trans_center *
+			scale *
+			transform *
+			off *
+			mirrorX *
+			rotationY *
+			rotation;
 
-		for (vxl_vertex& vertex : vertex_cache)
+		auto* normal_table = normal::normal_table_directory[(uint8_t)t.normal_type];
+
+		uint8_t normalLightIndex[256];
+
+		for (int i = 0; i < 256; i++)
 		{
-			d3dvector normal_vec = normal_table[vertex.voxel.normal];// *normal_trans;
-			d3dvector position = vertex.position * result;
+			D3DXVECTOR3 n;
+			D3DXVec3TransformNormal(&n, &normal_table[i], &result);
+			D3DXVec3Normalize(&n, &n);
 
-			D3DXVec3TransformNormal(&normal_vec, &normal_vec, &result);
+			float dot = n.x * reversed_light.x +
+				n.y * reversed_light.y +
+				n.z * reversed_light.z;
 
-			d3dvector screen_pos = math::fructum_transformation(buffer_view, position);
-			int32_t x = static_cast<int32_t>(screen_pos.x);
-			int32_t y = static_cast<int32_t>(screen_pos.y);
+			dot = std::clamp(dot, -1.0f, 1.0f);
 
-			if (x >= 0 && x < buffer_width && y >= 0 && y < buffer_height)
+			float angle = acosf(dot);
+
+			int idx;
+			if (angle >= D3DX_PI / 2.0f)
+				idx = 0;
+			else
+				idx = 31 - int(angle / (D3DX_PI / 2.0f) * 32.0f);
+
+			normalLightIndex[i] = (uint8_t)idx;
+		}
+
+		for (auto& vertex : vertex_cache)
+		{
+			const auto& v = vertex.position;
+
+			float px =
+				result.m[0][0] * v.x +
+				result.m[1][0] * v.y +
+				result.m[2][0] * v.z +
+				result.m[3][0];
+
+			float py =
+				result.m[0][1] * v.x +
+				result.m[1][1] * v.y +
+				result.m[2][1] * v.z +
+				result.m[3][1];
+
+			float pz =
+				result.m[0][2] * v.x +
+				result.m[1][2] * v.y +
+				result.m[2][2] * v.z +
+				result.m[3][2];
+
+			D3DXVECTOR3 pos{ px, py, pz };
+
+			D3DXVECTOR3 sp = math::fructum_transformation(buffer_view, pos);
+
+			int x = (int)sp.x;
+			int y = (int)sp.y;
+
+			if ((unsigned)x < buffer_width && (unsigned)y < buffer_height)
 			{
-				float32_t light_angle = std::acos((D3DXVec3Dot(&vxlfile::reversed_light, &normal_vec)) /
-					D3DXVec3Length(&vxlfile::reversed_light) / D3DXVec3Length(&normal_vec));
+				byte* cache_row = &cache[y * buffer_width];
+				float* z_row = &zbuffer[y * buffer_width];
 
-				byte color = 0;
-				if (light_angle >= D3DX_PI / 2.0f)
-				{
-					color = vplfile[0][vertex.voxel.color];
-				}
-				else
-				{
-					int32_t index = 31 - int32_t(light_angle / (D3DX_PI / 2.0f) * 32.0f);
-					color = vplfile[index][vertex.voxel.color];
-				}
+				float z = sp.z;
 
-				if (vertex.voxel.color && screen_pos.z < zbuffer[y][x] && screen_pos.z >= 0.0f)
+				if (vertex.voxel.color && z >= 0.0f)
 				{
-					zbuffer[y][x] = screen_pos.z;
-					cache[y][x] = color;
+					if (z < z_row[x])
+					{
+						z_row[x] = z;
 
-					if (xl > x)xl = x;
-					if (xh < x)xh = x;
-					if (yl > y)yl = y;
-					if (yh < y)yh = y;
+						uint8_t lightIdx = normalLightIndex[vertex.voxel.normal];
+						cache_row[x] = vplfile[lightIdx][vertex.voxel.color];
+
+						xl = std::min(xl, x);
+						xh = std::max(xh, x);
+						yl = std::min(yl, y);
+						yh = std::max(yh, y);
+					}
 				}
 			}
 
-			position.z = VanillaShadow ? min_bound_z : 0.0f;
-			d3dvector shadow_pos = math::fructum_transformation(buffer_view, position);
+			pz = VanillaShadow ? min_bound_z : 0.0f;
 
-			int32_t sx = static_cast<int32_t>(shadow_pos.x);
-			int32_t sy = static_cast<int32_t>(shadow_pos.y);
+			D3DXVECTOR3 sp2 = math::fructum_transformation(buffer_view, { px, py, pz });
 
-			if (sx >= 0 && sx < buffer_width && sy >= 0 && sy < buffer_height)
+			int sx = (int)sp2.x;
+			int sy = (int)sp2.y;
+
+			if ((unsigned)sx < buffer_width && (unsigned)sy < buffer_height)
 			{
-				shadow_cache[sy][sx] = 1;//shadow color index
-				if (sxl > sx)sxl = sx;
-				if (sxh < sx)sxh = sx;
-				if (syl > sy)syl = sy;
-				if (syh < sy)syh = sy;
+				shadow_cache[sy * buffer_width + sx] = 1;
+
+				sxl = std::min(sxl, sx);
+				sxh = std::max(sxh, sx);
+				syl = std::min(syl, sy);
+				syh = std::max(syh, sy);
 			}
 		}
 	}
 
-	size_t width = xh - xl + 1, height = yh - yl + 1;
-	size_t swidth = sxh - sxl + 1, sheight = syh - syl + 1;
+	size_t width = xh - xl + 1;
+	size_t height = yh - yl + 1;
 
-	cache_frame clip_cache(new byte[width * height]);
-	cache_frame clip_shadow(new byte[swidth * sheight]);
+	size_t sw = sxh - sxl + 1;
+	size_t sh = syh - syl + 1;
 
-	if (!clip_cache || !clip_shadow)
-		return false;
+	cache_frame clip(new byte[width * height]);
+	cache_frame clip_shadow(new byte[sw * sh]);
 
-	memset(clip_cache.get(), 0, width * height);
-	memset(clip_shadow.get(), 0, swidth * sheight);
+	for (int y = yl; y <= yh; y++)
+		memcpy(&clip[(y - yl) * width], &cache[y * buffer_width + xl], width);
 
-	if (_cache.empty())
-		_cache.resize(direction_count);
+	for (int y = syl; y <= syh; y++)
+		memcpy(&clip_shadow[(y - syl) * sw], &shadow_cache[y * buffer_width + sxl], sw);
 
-	if (_shadow_cache.empty())
-		_shadow_cache.resize(direction_count);
+	if (_cache.empty()) _cache.resize(direction_count);
+	if (_shadow_cache.empty()) _shadow_cache.resize(direction_count);
 
-	for (int32_t y = yl; y <= yh; y++)
-		memcpy(&clip_cache[(y - yl) * width], &cache[y][xl], width);
-
-	for (int32_t sy = syl; sy <= syh; sy++)
-		memcpy(&clip_shadow[(sy - syl) * swidth], &shadow_cache[sy][sxl], swidth);
-
-	_cache[diridx].cache = clip_cache;
-	_cache[diridx].frame_bound = { xl,yl,xh + 1,yh + 1 };
-
-	_shadow_cache[diridx].cache = clip_shadow;
-	_shadow_cache[diridx].frame_bound = { sxl,syl,sxh + 1,syh + 1 };
+	_cache[diridx] = { clip, { xl,yl,xh + 1,yh + 1 } };
+	_shadow_cache[diridx] = { clip_shadow, { sxl,syl,sxh + 1,syh + 1 } };
 
 	return true;
 }

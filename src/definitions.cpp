@@ -98,6 +98,27 @@ D3DXVECTOR3* WINAPI D3DXVec3TransformNormal(D3DXVECTOR3* pOut, const D3DXVECTOR3
     return pOut;
 }
 
+D3DXVECTOR3* WINAPI D3DXVec3Normalize(D3DXVECTOR3* pOut, const D3DXVECTOR3* pV)
+{
+    float len = sqrtf(pV->x * pV->x + pV->y * pV->y + pV->z * pV->z);
+
+    if (len > 1e-6f)
+    {
+        float inv = 1.0f / len;
+        pOut->x = pV->x * inv;
+        pOut->y = pV->y * inv;
+        pOut->z = pV->z * inv;
+    }
+    else
+    {
+        pOut->x = 0.0f;
+        pOut->y = 0.0f;
+        pOut->z = 0.0f;
+    }
+
+    return pOut;
+}
+
 D3DXMATRIX* D3DXMatrixIdentity(D3DXMATRIX* pOut)
 {
     pOut->m[0][1] = pOut->m[0][2] = pOut->m[0][3] =
