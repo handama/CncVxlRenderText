@@ -191,20 +191,21 @@ bool vxlfile::load(const byte* buffer)
 				voxel_count = *current_span_data++;
 				current_vox_idx += skip_count;
 
+				if (current_vox_idx >= current_span.voxels.size())
+					break;
+
 				if (voxel_count)
 				{
-					memcpy(&current_span.voxels[current_vox_idx], current_span_data, voxel_count * sizeof(voxel));
-					current_span_data += voxel_count * sizeof(voxel);
-				}
+					size_t actual_count = voxel_count;
+					if (current_vox_idx + actual_count > current_span.voxels.size())
+						actual_count = current_span.voxels.size() - current_vox_idx;
 
+					memcpy(&current_span.voxels[current_vox_idx], current_span_data, actual_count * sizeof(voxel));
+					current_span_data += voxel_count * sizeof(voxel);
+				}			
 				current_vox_idx += voxel_count;
 				voxel_end = *current_span_data++;
-
-				if (voxel_count != voxel_end)
-				{
-					// error report here
-				}
-			} 
+			} 			
 			while (current_span_data <= current_span_end);
 
 			for (size_t z = 0; z < current_tailer.zsize; z++)
