@@ -23,7 +23,7 @@ extern "C"
 	EXPORT bool WINAPI CncImgLoadVXLFile(const unsigned char* pBuffer);
 	EXPORT bool WINAPI CncImgLoadHVAFile(const unsigned char* pBuffer);
 
-	EXPORT bool WINAPI CncImgPrepareVXLCache(unsigned int nFacing, int F, int L, int H, int fireAngle, bool VanillaShadow);
+	EXPORT bool WINAPI CncImgPrepareVXLCache(unsigned int nFacing, int F, int L, int H, int fireAngle, bool VanillaShadow, float tiltAngle = 0.0f, float tiltDirection = 0.0f);
 	EXPORT int WINAPI CncImgGetImageWidth(unsigned int nFacing);
 	EXPORT int WINAPI CncImgGetImageHeight(unsigned int nFacing);
 	EXPORT void WINAPI CncImgGetImageFrame(unsigned int nFacing, int* width, int* height, int* x, int* y);

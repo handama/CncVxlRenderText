@@ -141,7 +141,8 @@ public:
 	voxel voxel_rh(size_t limb, uint32_t x, uint32_t y, uint32_t z);
 
 	bool prepare_single_dir_cache(const size_t diridx, class vplfile& vplfile,
-		const int F, const int L, const int H, const int fire_angle = 0, const bool VanillaShadow = true);
+		const int F, const int L, const int H, const int fire_angle = 0, const bool VanillaShadow = true,
+		const float tilt_angle = 0.0f, const float tilt_direction = 0.0f);
 	bool prepare_all_cache(class vplfile& vplfile, const int F, const int L, const int H);
 	cache_storage frame_cache(const size_t direction);
 	cache_storage shadow_cache(const size_t direction);

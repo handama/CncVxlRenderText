@@ -279,7 +279,9 @@ bool vxlfile::prepare_single_dir_cache(
 	vplfile& vplfile,
 	const int F, const int L, const int H,
 	const int fire_angle,
-	const bool VanillaShadow)
+	const bool VanillaShadow,
+	const float tilt_angle,
+	const float tilt_direction)
 {
 	if (!is_loaded() || diridx >= direction_count)
 		return false;
@@ -297,7 +299,7 @@ bool vxlfile::prepare_single_dir_cache(
 	memset(shadow_cache.get(), 0, buffer_width * buffer_height);
 	std::fill_n(zbuffer.get(), buffer_width * buffer_height, std::numeric_limits<float>::max());
 
-	d3dmatrix off, rotation, rotationY;
+	d3dmatrix off, rotation, rotationY, rotationTilt;
 
 	float rotation_angle = float((diridx + direction_count / 2) % direction_count * D3DX_PI * 2.0 / direction_count);
 	float rotation_angle_fire = float(fire_angle / 64.0f * 90.0f / 360.0f * D3DX_PI * 2.0f);
@@ -309,6 +311,28 @@ bool vxlfile::prepare_single_dir_cache(
 
 	D3DXMatrixRotationZ(&rotation, rotation_angle);
 	D3DXMatrixRotationY(&rotationY, rotation_angle_fire);
+
+	float sin_a = sinf(tilt_angle);
+	float cos_a = cosf(tilt_angle);
+	float sin_d = sinf(tilt_direction);
+	float cos_d = cosf(tilt_direction);
+	float c = cos_a;
+	float s = -sin_a;
+	float one_minus_c = 1.0f - c;
+	D3DXMatrixIdentity(&rotationTilt);
+	rotationTilt.m[0][0] = 1.0f - one_minus_c * cos_d * cos_d;
+	rotationTilt.m[0][1] = -one_minus_c * cos_d * sin_d;
+	rotationTilt.m[0][2] = s * cos_d;
+	rotationTilt.m[1][0] = -one_minus_c * sin_d * cos_d;
+	rotationTilt.m[1][1] = 1.0f - one_minus_c * sin_d * sin_d;
+	rotationTilt.m[1][2] = s * sin_d;
+	rotationTilt.m[2][0] = -s * cos_d;
+	rotationTilt.m[2][1] = -s * sin_d;
+	rotationTilt.m[2][2] = c;
+
+	float shadow_nx = cos_d * sin_a;
+	float shadow_ny = sin_d * sin_a;
+	float shadow_nz = cos_a;
 
 	int xl = buffer_width - 1, xh = 0;
 	int yl = buffer_height - 1, yh = 0;
@@ -339,6 +363,8 @@ bool vxlfile::prepare_single_dir_cache(
 		d3dmatrix transform = _associated_hva->matrix(0, l).integrate_matrix(scales, t.scale);
 		min_bound_z = std::min(min_bound_z, t.min_bounds.z() + transform.m[3][2]);
 	}
+
+	float shadow_ground = cos_a * (VanillaShadow ? min_bound_z : 0.0f);
 
 	for (size_t l = 0; l < limb_count(); l++)
 	{
@@ -375,7 +401,8 @@ bool vxlfile::prepare_single_dir_cache(
 			off *
 			mirrorX *
 			rotationY *
-			rotation;
+			rotation *
+			rotationTilt;
 
 		auto* normal_table = normal::normal_table_directory[(uint8_t)t.normal_type];
 
@@ -457,9 +484,15 @@ bool vxlfile::prepare_single_dir_cache(
 				}
 			}
 
-			pz = VanillaShadow ? min_bound_z : 0.0f;
+			// 阴影：顶点沿斜坡法向量方向(n)投影到斜坡平面上
+			// 交点 s = p + (shadow_ground - n·p) * n
+			float dot_np = shadow_nx * px + shadow_ny * py + shadow_nz * pz;
+			float t = shadow_ground - dot_np;
+			float shadow_wx = px + t * shadow_nx;
+			float shadow_wy = py + t * shadow_ny;
+			float shadow_wz = pz + t * shadow_nz;
 
-			D3DXVECTOR3 sp2 = math::fructum_transformation(buffer_view, { px, py, pz });
+			D3DXVECTOR3 sp2 = math::fructum_transformation(buffer_view, { shadow_wx, shadow_wy, shadow_wz });
 
 			int sx = (int)sp2.x;
 			int sy = (int)sp2.y;
