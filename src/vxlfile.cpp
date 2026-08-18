@@ -291,13 +291,19 @@ bool vxlfile::prepare_single_dir_cache(
 	std::unique_ptr<byte[]> cache(new byte[buffer_width * buffer_height]);
 	std::unique_ptr<byte[]> shadow_cache(new byte[buffer_width * buffer_height]);
 	std::unique_ptr<float[]> zbuffer(new float[buffer_width * buffer_height]);
+	std::unique_ptr<byte[]> zsrc(new byte[buffer_width * buffer_height]);
+	std::unique_ptr<float[]> fx(new float[buffer_width * buffer_height]);
+	std::unique_ptr<float[]> fy(new float[buffer_width * buffer_height]);
 
-	if (!cache || !shadow_cache || !zbuffer)
+	if (!cache || !shadow_cache || !zbuffer || !zsrc || !fx || !fy)
 		return false;
 
 	memset(cache.get(), 0, buffer_width * buffer_height);
 	memset(shadow_cache.get(), 0, buffer_width * buffer_height);
+	memset(zsrc.get(), 0, buffer_width * buffer_height);
 	std::fill_n(zbuffer.get(), buffer_width * buffer_height, std::numeric_limits<float>::max());
+	std::fill_n(fx.get(), buffer_width * buffer_height, 0.0f);
+	std::fill_n(fy.get(), buffer_width * buffer_height, 0.0f);
 
 	d3dmatrix off, rotation, rotationY, rotationTilt;
 
@@ -472,6 +478,9 @@ bool vxlfile::prepare_single_dir_cache(
 					if (z < z_row[x])
 					{
 						z_row[x] = z;
+						zsrc[y * buffer_width + x] = static_cast<byte>(vertex.position.z);
+						fx[y * buffer_width + x] = sp.x;
+						fy[y * buffer_width + x] = sp.y;
 
 						uint8_t lightIdx = normalLightIndex[vertex.voxel.normal];
 						cache_row[x] = vplfile[lightIdx][vertex.voxel.color];
@@ -508,6 +517,120 @@ bool vxlfile::prepare_single_dir_cache(
 			}
 		}
 	}
+
+	// Repair quantization artifacts of the isometric projection in one pass.
+	// Voxels on a face project with perfectly uniform spacing (e.g. 0.7071 px for
+	// the top face at dir 16), so integer truncation skips every other column.
+	// A skipped pixel shows either nothing (empty crack) or a voxel from another
+	// face (dark dot). In both cases its left+right neighbours belong to the same
+	// face (same voxel Z). So: any pixel whose left+right neighbours share the same
+	// non-zero voxel Z, while its own Z is 0 (empty) or lower (occluded by another
+	// face), is a quantization artifact. Instead of copying a neighbour colour, we
+	// MOVE the overlapping voxel back to where its float coordinate belongs: pick
+	// the neighbour whose winning voxel's float x is closer to this pixel than to
+	// its own column, and use that voxel's own colour. The hollow interior is never
+	// touched: its empty pixels have empty neighbours.
+	auto repair_artifacts = [](byte* buf, const byte* zsrc, const float* fx, int xl, int xh, int yl, int yh, int width)
+	{
+		const int bw = xh - xl + 1;
+		const int bh = yh - yl + 1;
+		std::vector<byte> orig(bw * bh);
+		std::vector<byte> zorig(bw * bh);
+		std::vector<float> fxorig(bw * bh);
+		for (int y = yl; y <= yh; y++)
+		{
+			memcpy(&orig[(y - yl) * bw], &buf[y * width + xl], bw);
+			memcpy(&zorig[(y - yl) * bw], &zsrc[y * width + xl], bw);
+			memcpy(&fxorig[(y - yl) * bw], &fx[y * width + xl], bw * sizeof(float));
+		}
+
+		auto at = [&](int x, int y) -> byte
+		{
+			return orig[(y - yl) * bw + (x - xl)];
+		};
+		auto zat = [&](int x, int y) -> byte
+		{
+			return zorig[(y - yl) * bw + (x - xl)];
+		};
+		auto fxat = [&](int x, int y) -> float
+		{
+			return fxorig[(y - yl) * bw + (x - xl)];
+		};
+
+		for (int y = yl; y <= yh; y++)
+		{
+			for (int x = xl; x <= xh; x++)
+			{
+				if (x == xl || x == xh) continue;
+
+				byte z = zat(x, y);
+				byte l = zat(x - 1, y);
+				byte r = zat(x + 1, y);
+
+				if (l == 0 || r == 0 || l != r) continue;
+				if (z == l) continue;
+				if (z != 0 && z > l) continue; // shows a HIGHER voxel: correct occlusion
+
+				if (z == 0)
+				{
+					// empty pixel: no voxel of its own exists, fill with a neighbour colour
+					buf[y * width + x] = at(x - 1, y);
+					continue;
+				}
+
+				// dark pixel: MOVE the overlapping voxel back to where its float x
+				// belongs, so the gap shows that voxel's own colour
+				int src = -1;
+				float best = 0.0f;
+				for (int dx = -1; dx <= 1; dx += 2)
+				{
+					int nx = x + dx;
+					if (zat(nx, y) == 0) continue;
+					float d_here = std::fabs(fxat(nx, y) - (float)x);
+					float d_own = std::fabs(fxat(nx, y) - (float)nx);
+					if (d_here < d_own && (src == -1 || d_here < best))
+					{
+						src = nx;
+						best = d_here;
+					}
+				}
+				if (src != -1)
+					buf[y * width + x] = at(src, y);
+				else
+					buf[y * width + x] = at(x - 1, y); // no voxel belongs here: fall back to neighbour colour
+			}
+		}
+	};
+
+	// Shadow cache is a 0/1 mask: fill any pixel whose left+right neighbours are
+	// both shadowed (same quantization skip as the model).
+	auto repair_shadow = [](byte* buf, int xl, int xh, int yl, int yh, int width)
+	{
+		const int bw = xh - xl + 1;
+		const int bh = yh - yl + 1;
+		std::vector<byte> orig(bw * bh);
+		for (int y = yl; y <= yh; y++)
+			memcpy(&orig[(y - yl) * bw], &buf[y * width + xl], bw);
+
+		auto at = [&](int x, int y) -> byte
+		{
+			return orig[(y - yl) * bw + (x - xl)];
+		};
+
+		for (int y = yl; y <= yh; y++)
+		{
+			for (int x = xl; x <= xh; x++)
+			{
+				if (x == xl || x == xh) continue;
+				if (at(x, y)) continue;
+				if (at(x - 1, y) && at(x + 1, y))
+					buf[y * width + x] = 1;
+			}
+		}
+	};
+
+	repair_artifacts(cache.get(), zsrc.get(), fx.get(), xl, xh, yl, yh, buffer_width);
+	repair_shadow(shadow_cache.get(), sxl, sxh, syl, syh, buffer_width);
 
 	size_t width = xh - xl + 1;
 	size_t height = yh - yl + 1;
